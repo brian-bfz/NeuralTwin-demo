@@ -1,0 +1,1 @@
+This is a temporary demo of NeuralTwin. NeuralTwin is a pipeline for transferring a physics simulator of deformable objects into a neural network. It uses the model's uncertainty as a reward to autonomously explore the simulation. We plan to open source NeuralTwin soon. Before then, recruiters can use this demo to review my technical skills. 

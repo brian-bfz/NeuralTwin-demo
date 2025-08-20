@@ -217,7 +217,7 @@ class GNNPlayground:
             
         return predicted_state
     
-    def interact(self, object_state, robot_state, first_states):
+    def interact(self, object_state, robot_state, first_states, virtual_key=False):
         """Main interactive loop for GNN playground"""
         # Initialize model and UI
         object_state_gnn, robot_state_gnn, topo_edges, first_states_gnn = self.downsample_and_topo_edges(object_state, robot_state, first_states)
@@ -235,6 +235,11 @@ class GNNPlayground:
         else:
             self.visualizer.init_o3d_visualizer(pcds, colors)
         self.init_control_ui()
+        
+        # Initialize virtual key tracking if enabled
+        if virtual_key:
+            self.virtual_keys = {}  # Dictionary to track virtual keys with timestamps
+            self.virtual_key_duration = 0.03  # Virtual key press duration in seconds
         
         # Set up keyboard listener
         listener = keyboard.Listener(on_press=self.on_press, on_release=self.on_release)
@@ -292,8 +297,36 @@ class GNNPlayground:
             
             # Handle OpenCV window events
             key = cv2.waitKey(1) & 0xFF
-            if key == 27:  # ESC key
-                break
+            
+            if virtual_key:
+                # Handle virtual keyboard input through OpenCV window
+                if key != -1:
+                    key_char = chr(key & 0xFF).lower()
+                    if key_char in self.key_mappings:
+                        # Store virtual key with timestamp - refresh timestamp if already pressed
+                        self.virtual_keys[key_char] = time.time()
+                        self.pressed_keys.add(key_char)
+                    elif key == 27:  # ESC key to exit
+                        break
+                
+                # Process all keyboard inputs (both physical and virtual)
+                # For virtual keys, check if they're still active based on timestamp
+                current_time = time.time()
+                keys_to_remove = []
+                for k, press_time in self.virtual_keys.items():
+                    if current_time - press_time > self.virtual_key_duration:
+                        keys_to_remove.append(k)
+                
+                # Remove expired virtual keys
+                for k in keys_to_remove:
+                    if k in self.pressed_keys:
+                        self.pressed_keys.discard(k)
+                    if k in self.virtual_keys:
+                        del self.virtual_keys[k]
+            else:
+                # Normal mode - just handle ESC
+                if key == 27:  # ESC key
+                    break
             
             # Small delay to control frame rate 
             time.sleep(1.0 / self.visualizer.FPS)
@@ -310,6 +343,7 @@ if __name__ == "__main__":
     parser.add_argument("--case_name", type=str, default=None, help="Case name. Default: the case name in the config file")
     parser.add_argument("--motion", type=str, choices=["push", "lift"], required=True, help="Push or lift motion")
     parser.add_argument("--start_pose", type=int, default=None, help="Start pose index. Default: random")
+    parser.add_argument("--virtual_key", action="store_true", help="Use virtual key input")
     args = parser.parse_args()
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -339,4 +373,4 @@ if __name__ == "__main__":
     gnn_playground = GNNPlayground(model_path, config, device, case_name, motion)
     pose_picker = PickStartPose(pose_file, device)
     object_state, robot_state, first_states, _ = pose_picker(args.start_pose)
-    gnn_playground.interact(object_state, robot_state, first_states)
+    gnn_playground.interact(object_state, robot_state, first_states, args.virtual_key)
